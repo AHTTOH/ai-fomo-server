@@ -1,0 +1,75 @@
+name: AI News Auto Bot
+
+on:
+  schedule:
+    - cron: '0 23 * * *' # 08:00 KST every day
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode'
+        required: true
+        default: 'daily'
+        type: choice
+        options:
+          - daily
+          - backfill
+      backfill_weeks:
+        description: 'Weeks to backfill when mode=backfill'
+        required: false
+        default: '16'
+        type: string
+      backfill_start_date:
+        description: 'Start date for backfill (YYYY-MM-DD)'
+        required: false
+        default: ''
+        type: string
+      backfill_end_date:
+        description: 'End date for backfill (YYYY-MM-DD)'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Collect only, do not post to Discord'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  fetch-news:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Seoul
+      NEWS_BOT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'daily' }}
+      NEWS_BACKFILL_WEEKS: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_weeks || '16' }}
+      NEWS_BACKFILL_START_DATE: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_start_date || '' }}
+      NEWS_BACKFILL_END_DATE: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_end_date || '' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run news bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          NEWS_CHANNEL_ID: ${{ secrets.NEWS_CHANNEL_ID }}
+          NEWS_CHANNEL_NAME: ${{ secrets.NEWS_CHANNEL_NAME }}
+        run: node news-bot.js "${NEWS_BOT_MODE}"
+
+      - name: Persist bot history
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add news-history.json
+          git commit -m "Update news bot history" || echo "No changes to commit"
+          git push
+        continue-on-error: true
