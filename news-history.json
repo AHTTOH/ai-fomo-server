@@ -13,7 +13,11 @@
       "daily:geeknews:https://news.hada.io/topic?id=28315",
       "daily:hackernews:https://news.ycombinator.com/item?id=47688591",
       "daily:hackernews:https://news.ycombinator.com/item?id=47688712",
-      "daily:hackernews:https://news.ycombinator.com/item?id=47688944"
+      "daily:hackernews:https://news.ycombinator.com/item?id=47688944",
+      "daily:geeknews:https://news.hada.io/topic?id=28312",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689135",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689236",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689318"
     ],
     "backfill": [
       "backfill:geeknews:2026년 1월 1주차 (2025-12-29 ~ 2026-01-04):attention:25462",
