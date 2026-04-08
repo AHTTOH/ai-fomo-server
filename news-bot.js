@@ -15,6 +15,22 @@ const NEWS_CHANNEL_ID = process.env.NEWS_CHANNEL_ID || '';
 const NEWS_CHANNEL_NAME = process.env.NEWS_CHANNEL_NAME || '🤖-ai-뉴스-자동봇';
 const HISTORY_FILE = path.join(__dirname, 'news-history.json');
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAILY_ALLOW_KEYWORDS = [
+  'ai', 'llm', 'ml', 'gpt', 'agent', 'agents', 'rag', 'mcp',
+  'openai', 'anthropic', 'claude', 'gemini', 'copilot', 'prompt',
+  'inference', 'model', 'models', 'api', 'sdk', 'developer',
+  'development', 'software', 'engineering', 'engineer', 'programming',
+  'code', 'coding', 'database', 'cloud', 'infra', 'security', 'startup',
+  'web', 'app', '앱', '개발', '개발자', '프로그래밍', '코드', '엔지니어',
+  '소프트웨어', '오픈소스', '모델', '추론', '에이전트', '인공지능',
+  '머신러닝', '스타트업', '보안', '데이터', '클라우드', '웹', '서비스',
+];
+const DAILY_BLOCK_KEYWORDS = [
+  '호르무즈', '중동', '휴전', '전쟁', '공습', '군사', '외교', '선거',
+  '정당', '대통령', '국회', '시위', '이란', '이스라엘', 'ukraine',
+  'russia', 'gaza', 'iran', 'israel', 'ceasefire', 'election',
+  'politics', 'war', 'military',
+];
 
 const SOURCE_META = {
   geeknews: {
@@ -120,6 +136,27 @@ function truncate(text, maxLength) {
   }
 
   return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function normalizeText(text) {
+  return String(text || '').toLowerCase();
+}
+
+function hasKeyword(text, keywords) {
+  const normalized = normalizeText(text);
+  return keywords.some((keyword) => normalized.includes(keyword));
+}
+
+function shouldIncludeDailyItem(item) {
+  const haystack = [item.title, item.contentSnippet, item.content, item.summary]
+    .filter(Boolean)
+    .join(' ');
+
+  if (hasKeyword(haystack, DAILY_BLOCK_KEYWORDS)) {
+    return false;
+  }
+
+  return hasKeyword(haystack, DAILY_ALLOW_KEYWORDS);
 }
 
 function decodeHtml(text) {
@@ -511,21 +548,29 @@ function parseHnMetrics(contentSnippet) {
 async function collectDailyGeekNews(limit) {
   const feed = await parseRss('https://news.hada.io/rss/news');
 
-  return (feed.items || []).slice(0, limit).reverse().map((item) => ({
-    dedupeKey: `daily:geeknews:${item.guid || item.id || item.link}`,
-    source: 'geeknews',
-    title: stripHtml(item.title),
-    url: item.link,
-    description: truncate(stripHtml(item.contentSnippet || item.content || item.summary || ''), 350),
-    publishedAt: item.isoDate || item.pubDate || null,
-    footer: 'GeekNews | latest feed',
-  }));
+  return (feed.items || [])
+    .filter(shouldIncludeDailyItem)
+    .slice(0, limit)
+    .reverse()
+    .map((item) => ({
+      dedupeKey: `daily:geeknews:${item.guid || item.id || item.link}`,
+      source: 'geeknews',
+      title: stripHtml(item.title),
+      url: item.link,
+      description: truncate(stripHtml(item.contentSnippet || item.content || item.summary || ''), 350),
+      publishedAt: item.isoDate || item.pubDate || null,
+      footer: 'GeekNews | latest feed',
+    }));
 }
 
 async function collectDailyHackerNews(limit) {
   const feed = await parseRss(`https://hnrss.org/newest?q=${encodeURIComponent(HN_QUERY)}`);
 
-  return (feed.items || []).slice(0, limit).reverse().map((item) => {
+  return (feed.items || [])
+    .filter(shouldIncludeDailyItem)
+    .slice(0, limit)
+    .reverse()
+    .map((item) => {
     const metrics = parseHnMetrics(item.contentSnippet);
 
     return {
