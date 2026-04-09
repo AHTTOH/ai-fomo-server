@@ -30,7 +30,8 @@ const DAILY_BLOCK_KEYWORDS = [
   '호르무즈', '중동', '휴전', '전쟁', '공습', '군사', '외교', '선거',
   '정당', '대통령', '국회', '시위', '이란', '이스라엘', 'ukraine',
   'russia', 'gaza', 'iran', 'israel', 'ceasefire', 'election',
-  'politics', 'war', 'military',
+  'politics', 'war', 'military', 'hormuz', 'strait of hormuz',
+  'middle east', 'geopolitics', 'geopolitical',
 ];
 
 const SOURCE_META = {
