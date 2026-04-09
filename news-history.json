@@ -23,7 +23,19 @@
       "daily:geeknews:https://news.hada.io/topic?id=28321",
       "daily:hackernews:https://news.ycombinator.com/item?id=47697430",
       "daily:hackernews:https://news.ycombinator.com/item?id=47697472",
-      "daily:hackernews:https://news.ycombinator.com/item?id=47697525"
+      "daily:hackernews:https://news.ycombinator.com/item?id=47697525",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689504",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689509",
+      "daily:wikidocs:https://wikidocs.net/338316",
+      "daily:wikidocs:https://wikidocs.net/338421",
+      "daily:geeknews:https://news.hada.io/topic?id=28317",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689661",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689668",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689773",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689776",
+      "daily:hackernews:https://news.ycombinator.com/item?id=47689872",
+      "daily:itworld:https://www.itworld.co.kr/article/4154409/%ea%b5%ad%eb%82%b4-%ec%a0%9c%ec%a1%b0-%eb%8c%80%ea%b8%b0%ec%97%85-%ec%98%a4%ed%94%88%ed%85%8d%ec%8a%a4%ed%8a%b8-ai-%ea%b8%b0%eb%b0%98-%ec%9e%90%eb%8f%99%ed%99%94%eb%a1%9c-%ec%84%a4%eb%b9%84-%ec%a0%90.html",
+      "daily:itworld:https://www.itworld.co.kr/article/4155384/it-%eb%b6%84%ec%95%bc-%ea%b3%a0%ec%9a%a9-%ed%95%9c%ed%8c%8c-2025%eb%85%84%eb%b3%b4%eb%8b%a4-%eb%b9%a0%eb%a5%b4%eb%8b%a4-ai-%ec%9e%90%eb%8f%99%ed%99%94%ea%b0%80-%ec%9d%b8%eb%a0%a5-%ea%b2%b0.html"
     ],
     "backfill": [
       "backfill:geeknews:2026년 1월 1주차 (2025-12-29 ~ 2026-01-04):attention:25462",

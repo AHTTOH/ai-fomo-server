@@ -2,7 +2,8 @@ name: AI News Auto Bot
 
 on:
   schedule:
-    - cron: '0 23 * * *' # 08:00 KST every day
+    - cron: '55 22 * * *' # 07:55 KST every day
+    - cron: '5 23 * * *' # 08:05 KST every day
   workflow_dispatch:
     inputs:
       mode:
@@ -36,6 +37,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: ai-news-auto-bot
+  cancel-in-progress: false
 
 jobs:
   fetch-news:

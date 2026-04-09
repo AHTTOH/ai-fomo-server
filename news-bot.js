@@ -15,6 +15,7 @@ const NEWS_CHANNEL_ID = process.env.NEWS_CHANNEL_ID || '';
 const NEWS_CHANNEL_NAME = process.env.NEWS_CHANNEL_NAME || '🤖-ai-뉴스-자동봇';
 const HISTORY_FILE = path.join(__dirname, 'news-history.json');
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_ALLOW_KEYWORDS = [
   'ai', 'llm', 'ml', 'gpt', 'agent', 'agents', 'rag', 'mcp',
   'openai', 'anthropic', 'claude', 'gemini', 'copilot', 'prompt',
@@ -41,12 +42,49 @@ const SOURCE_META = {
     label: 'Hacker News',
     color: 0xffa500,
   },
+  wikidocs: {
+    label: 'WikiDocs',
+    color: 0x22aa99,
+  },
+  itworld: {
+    label: 'ITWorld Korea',
+    color: 0x0077cc,
+  },
 };
+
+const SOURCE_PRIORITY = {
+  geeknews: 3,
+  itworld: 2,
+  wikidocs: 1,
+};
+
+const WIKIDOCS_BOOKS = [
+  { id: '18346', title: 'AI 에이전트 개발' },
+  { id: '19485', title: 'n8n AI 자동화 가이드' },
+  { id: '19208', title: 'AI 도구 백과사전' },
+  { id: '18896', title: '속성 Claude Code 실무 바이브코딩' },
+];
 
 const args = parseArgs(process.argv.slice(2));
 const MODE = (args._[0] || process.env.NEWS_BOT_MODE || 'daily').toLowerCase();
 const DRY_RUN = toBoolean(args['dry-run'], process.env.DRY_RUN);
 const DAILY_LIMIT = toPositiveInteger(args['daily-limit'] || process.env.NEWS_DAILY_LIMIT, 3);
+const WIKIDOCS_DAILY_LIMIT = toPositiveInteger(
+  args['wikidocs-limit'] || process.env.WIKIDOCS_DAILY_LIMIT,
+  2,
+);
+const ITWORLD_DAILY_LIMIT = toPositiveInteger(
+  args['itworld-limit'] || process.env.ITWORLD_DAILY_LIMIT,
+  2,
+);
+const WIKIDOCS_MAX_AGE_DAYS = toPositiveInteger(
+  args['wikidocs-max-age-days'] || process.env.WIKIDOCS_MAX_AGE_DAYS,
+  14,
+);
+const ITWORLD_MAX_AGE_DAYS = toPositiveInteger(
+  args['itworld-max-age-days'] || process.env.ITWORLD_MAX_AGE_DAYS,
+  7,
+);
 const BACKFILL_WEEKS = toPositiveInteger(args.weeks || process.env.NEWS_BACKFILL_WEEKS, 16);
 const BACKFILL_START_DATE = parseDateInput(args['start-date'] || process.env.NEWS_BACKFILL_START_DATE);
 const BACKFILL_END_DATE = parseDateInput(args['end-date'] || process.env.NEWS_BACKFILL_END_DATE);
@@ -201,6 +239,19 @@ function formatDate(date) {
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
   ].join('-');
+}
+
+function isRecentEnough(value, maxAgeDays) {
+  if (!value) {
+    return false;
+  }
+
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return false;
+  }
+
+  return timestamp >= Date.now() - maxAgeDays * DAY_MS;
 }
 
 function addDays(date, amount) {
@@ -545,6 +596,110 @@ function parseHnMetrics(contentSnippet) {
   };
 }
 
+function canonicalizeUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    const blockedParams = [
+      'utm_source',
+      'utm_medium',
+      'utm_campaign',
+      'utm_term',
+      'utm_content',
+      'ref',
+      'ref_src',
+      'source',
+      'src',
+    ];
+
+    blockedParams.forEach((key) => {
+      parsed.searchParams.delete(key);
+    });
+
+    parsed.hash = '';
+    parsed.hostname = parsed.hostname.toLowerCase();
+
+    if ((parsed.protocol === 'https:' && parsed.port === '443') || (parsed.protocol === 'http:' && parsed.port === '80')) {
+      parsed.port = '';
+    }
+
+    if (parsed.pathname !== '/') {
+      parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    }
+
+    return parsed.toString();
+  } catch (error) {
+    return String(rawUrl || '').trim();
+  }
+}
+
+function normalizeComparableTitle(title) {
+  return normalizeText(title)
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^a-z0-9가-힣]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isDuplicateDailyEntry(left, right) {
+  const leftUrl = canonicalizeUrl(left.url);
+  const rightUrl = canonicalizeUrl(right.url);
+  if (leftUrl && rightUrl && leftUrl === rightUrl) {
+    return true;
+  }
+
+  const leftTitle = normalizeComparableTitle(left.title);
+  const rightTitle = normalizeComparableTitle(right.title);
+
+  if (!leftTitle || !rightTitle) {
+    return false;
+  }
+
+  if (leftTitle === rightTitle) {
+    return true;
+  }
+
+  const shorterLength = Math.min(leftTitle.length, rightTitle.length);
+  if (shorterLength < 24) {
+    return false;
+  }
+
+  return leftTitle.includes(rightTitle) || rightTitle.includes(leftTitle);
+}
+
+function compareDailyEntryPreference(left, right) {
+  const sourceDelta = (SOURCE_PRIORITY[right.source] || 0) - (SOURCE_PRIORITY[left.source] || 0);
+  if (sourceDelta !== 0) {
+    return sourceDelta;
+  }
+
+  const descriptionDelta = (right.description || '').length - (left.description || '').length;
+  if (descriptionDelta !== 0) {
+    return descriptionDelta;
+  }
+
+  return new Date(right.publishedAt || 0).getTime() - new Date(left.publishedAt || 0).getTime();
+}
+
+function dedupeDailyEntries(entries) {
+  const selected = [];
+
+  for (const entry of entries) {
+    const duplicateIndex = selected.findIndex((candidate) => isDuplicateDailyEntry(candidate, entry));
+    if (duplicateIndex === -1) {
+      selected.push(entry);
+      continue;
+    }
+
+    if (compareDailyEntryPreference(selected[duplicateIndex], entry) < 0) {
+      selected[duplicateIndex] = entry;
+    }
+  }
+
+  return selected.sort(
+    (left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime(),
+  );
+}
+
 async function collectDailyGeekNews(limit) {
   const feed = await parseRss('https://news.hada.io/rss/news');
 
@@ -585,6 +740,55 @@ async function collectDailyHackerNews(limit) {
       footer: `Hacker News | newest "${HN_QUERY}"`,
     };
   });
+}
+
+async function collectDailyWikiDocs(limit) {
+  const feeds = await Promise.all(
+    WIKIDOCS_BOOKS.map(async (book) => {
+      const feed = await parseRss(`https://wikidocs.net/book/${book.id}/rss/`);
+      return { book, feed };
+    }),
+  );
+
+  return feeds
+    .flatMap(({ book, feed }) => {
+      const bookTitle = stripHtml(feed.title || book.title);
+
+      return (feed.items || []).map((item) => ({
+        dedupeKey: `daily:wikidocs:${item.guid || item.id || item.link}`,
+        source: 'wikidocs',
+        title: stripHtml(item.title),
+        url: item.link,
+        description: truncate(`${bookTitle} 업데이트`, 350),
+        contentSnippet: `${bookTitle} ${stripHtml(item.description || '')}`,
+        publishedAt: item.isoDate || item.pubDate || null,
+        footer: `WikiDocs | ${bookTitle}`,
+      }));
+    })
+    .filter((item) => isRecentEnough(item.publishedAt, WIKIDOCS_MAX_AGE_DAYS))
+    .filter(shouldIncludeDailyItem)
+    .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime())
+    .slice(-limit);
+}
+
+async function collectDailyItWorld(limit) {
+  const feed = await parseRss('https://www.itworld.co.kr/artificial-intelligence/feed/');
+
+  return (feed.items || [])
+    .map((item) => ({
+      dedupeKey: `daily:itworld:${item.guid || item.id || item.link}`,
+      source: 'itworld',
+      title: stripHtml(item.title),
+      url: item.link,
+      description: truncate(stripHtml(item.contentSnippet || item.content || item.summary || ''), 350),
+      contentSnippet: stripHtml(item.categories?.join(' ') || ''),
+      publishedAt: item.isoDate || item.pubDate || null,
+      footer: 'ITWorld Korea | AI',
+    }))
+    .filter((item) => isRecentEnough(item.publishedAt, ITWORLD_MAX_AGE_DAYS))
+    .filter(shouldIncludeDailyItem)
+    .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime())
+    .slice(-limit);
 }
 
 function parseGeekNewsPastPage(html, day) {
@@ -725,13 +929,12 @@ async function collectBackfillEntries(range) {
 }
 
 async function runDaily(channel, state) {
-  const [geekNewsEntries, hackerNewsEntries] = await Promise.all([
+  const [geekNewsEntries, wikiDocsEntries, itWorldEntries] = await Promise.all([
     collectDailyGeekNews(DAILY_LIMIT),
-    collectDailyHackerNews(DAILY_LIMIT),
+    collectDailyWikiDocs(WIKIDOCS_DAILY_LIMIT),
+    collectDailyItWorld(ITWORLD_DAILY_LIMIT),
   ]);
-  const orderedEntries = [...geekNewsEntries, ...hackerNewsEntries].sort(
-    (left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime(),
-  );
+  const orderedEntries = dedupeDailyEntries([...geekNewsEntries, ...wikiDocsEntries, ...itWorldEntries]);
 
   return postDailyEntries(channel, orderedEntries, state);
 }
