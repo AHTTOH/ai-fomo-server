@@ -39,7 +39,11 @@
       "daily:itworld:https://www.itworld.co.kr/article/4156213/%ec%9b%90%eb%8d%94%ed%92%80-%ed%95%9c%ea%b5%ad-%ec%a7%84%ec%b6%9c-%eb%b3%b8%ea%b2%a9%ed%99%94%ec%97%94%ed%84%b0%ed%94%84%eb%9d%bc%ec%9d%b4%ec%a6%88-ai-%ec%97%90%ec%9d%b4%ec%a0%84%ed%8a%b8.html",
       "daily:geeknews:https://news.hada.io/topic?id=28356",
       "daily:geeknews:https://news.hada.io/topic?id=28360",
-      "daily:geeknews:https://news.hada.io/topic?id=28361"
+      "daily:geeknews:https://news.hada.io/topic?id=28361",
+      "daily:itworld:https://www.itworld.co.kr/article/4156928/%eb%a7%a5%eb%b6%81-%eb%84%a4%ec%98%a4-ssd-%ec%97%85%ea%b7%b8%eb%a0%88%ec%9d%b4%eb%93%9c-%ea%b0%80%eb%8a%a5%ed%96%88%eb%8b%a4%eb%82%a9%eb%95%9c-%ec%8b%a4%eb%a0%a5%ec%9d%80-%ed%95%84%ec%88%98.html",
+      "daily:geeknews:https://news.hada.io/topic?id=28394",
+      "daily:geeknews:https://news.hada.io/topic?id=28395",
+      "daily:geeknews:https://news.hada.io/topic?id=28396"
     ],
     "backfill": [
       "backfill:geeknews:2026년 1월 1주차 (2025-12-29 ~ 2026-01-04):attention:25462",
