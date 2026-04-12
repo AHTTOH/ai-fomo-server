@@ -51,7 +51,9 @@
       "daily:geeknews:https://news.hada.io/topic?id=28423",
       "daily:geeknews:https://news.hada.io/topic?id=28448",
       "daily:geeknews:https://news.hada.io/topic?id=28451",
-      "daily:geeknews:https://news.hada.io/topic?id=28453"
+      "daily:geeknews:https://news.hada.io/topic?id=28453",
+      "daily:geeknews:https://news.hada.io/topic?id=28456",
+      "daily:itworld:https://www.itworld.co.kr/article/4157567/ram-%ea%b0%80%ea%b2%a9-%ed%8f%ad%eb%93%b1%c2%b7ai%ea%b1%b0%ed%92%88-%ec%97%ac%ed%8c%8c%ed%94%84%eb%a0%88%ec%9e%84%ec%9b%8c%ed%81%ac-%ec%83%9d%ec%a1%b4-%ec%8b%9c%ed%97%98%eb%8c%80-%ec%98%ac.html"
     ],
     "backfill": [
       "backfill:geeknews:2026년 1월 1주차 (2025-12-29 ~ 2026-01-04):attention:25462",
