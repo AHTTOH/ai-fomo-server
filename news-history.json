@@ -48,7 +48,10 @@
       "daily:geeknews:https://news.hada.io/topic?id=28398",
       "daily:geeknews:https://news.hada.io/topic?id=28419",
       "daily:geeknews:https://news.hada.io/topic?id=28420",
-      "daily:geeknews:https://news.hada.io/topic?id=28423"
+      "daily:geeknews:https://news.hada.io/topic?id=28423",
+      "daily:geeknews:https://news.hada.io/topic?id=28448",
+      "daily:geeknews:https://news.hada.io/topic?id=28451",
+      "daily:geeknews:https://news.hada.io/topic?id=28453"
     ],
     "backfill": [
       "backfill:geeknews:2026년 1월 1주차 (2025-12-29 ~ 2026-01-04):attention:25462",
