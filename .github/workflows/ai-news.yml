@@ -2,8 +2,7 @@ name: AI News Auto Bot
 
 on:
   schedule:
-    - cron: '55 22 * * *' # 07:55 KST every day
-    - cron: '5 23 * * *' # 08:05 KST every day
+    - cron: '30 22 * * *' # 07:30 KST every day
   workflow_dispatch:
     inputs:
       mode:
@@ -48,6 +47,7 @@ jobs:
     env:
       TZ: Asia/Seoul
       NEWS_BOT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'daily' }}
+      NEWS_DAILY_SOURCES: geeknews,wikidocs,itworld
       NEWS_BACKFILL_WEEKS: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_weeks || '16' }}
       NEWS_BACKFILL_START_DATE: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_start_date || '' }}
       NEWS_BACKFILL_END_DATE: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_end_date || '' }}

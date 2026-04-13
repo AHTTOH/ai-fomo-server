@@ -31,7 +31,16 @@ const DAILY_BLOCK_KEYWORDS = [
   '정당', '대통령', '국회', '시위', '이란', '이스라엘', 'ukraine',
   'russia', 'gaza', 'iran', 'israel', 'ceasefire', 'election',
   'politics', 'war', 'military', 'hormuz', 'strait of hormuz',
-  'middle east', 'geopolitics', 'geopolitical',
+  'middle east', 'geopolitics', 'geopolitical', 'missile', 'airstrike',
+  'navy', 'sanction', 'tariff', 'trade war', 'diplomacy', 'government',
+  'congress', 'parliament', 'white house', 'prime minister', 'president',
+  'bitcoin', 'crypto', 'cryptocurrency', 'web3', 'nft', 'satoshi',
+  'football', 'soccer', 'baseball', 'basketball', 'bike', 'bicycle', 'bell',
+  'legal', 'law', 'court', 'judgment', 'ruling', 'lawsuit',
+  '호르무즈', '호르무즈해협', '정치', '전쟁', '군사', '미사일', '공습',
+  '외교', '정부', '국회', '정당', '대선', '총선', '관세', '지정학',
+  '비트코인', '코인', '암호화폐', '축구', '야구', '농구', '자전거', '벨',
+  '법령', '판례', '재판', '법원', '소송',
 ];
 
 const SOURCE_META = {
@@ -69,15 +78,6 @@ const WIKIDOCS_BOOKS = [
 const args = parseArgs(process.argv.slice(2));
 const MODE = (args._[0] || process.env.NEWS_BOT_MODE || 'daily').toLowerCase();
 const DRY_RUN = toBoolean(args['dry-run'], process.env.DRY_RUN);
-const DAILY_LIMIT = toPositiveInteger(args['daily-limit'] || process.env.NEWS_DAILY_LIMIT, 3);
-const WIKIDOCS_DAILY_LIMIT = toPositiveInteger(
-  args['wikidocs-limit'] || process.env.WIKIDOCS_DAILY_LIMIT,
-  2,
-);
-const ITWORLD_DAILY_LIMIT = toPositiveInteger(
-  args['itworld-limit'] || process.env.ITWORLD_DAILY_LIMIT,
-  2,
-);
 const WIKIDOCS_MAX_AGE_DAYS = toPositiveInteger(
   args['wikidocs-max-age-days'] || process.env.WIKIDOCS_MAX_AGE_DAYS,
   14,
@@ -89,7 +89,15 @@ const ITWORLD_MAX_AGE_DAYS = toPositiveInteger(
 const BACKFILL_WEEKS = toPositiveInteger(args.weeks || process.env.NEWS_BACKFILL_WEEKS, 16);
 const BACKFILL_START_DATE = parseDateInput(args['start-date'] || process.env.NEWS_BACKFILL_START_DATE);
 const BACKFILL_END_DATE = parseDateInput(args['end-date'] || process.env.NEWS_BACKFILL_END_DATE);
-const HN_QUERY = String(args.query || process.env.HN_QUERY || 'AI');
+const DAILY_SOURCE_COLLECTORS = {
+  geeknews: () => collectDailyGeekNews(),
+  wikidocs: () => collectDailyWikiDocs(),
+  itworld: () => collectDailyItWorld(),
+};
+const DAILY_SOURCES = parseSourceList(
+  args.sources || process.env.NEWS_DAILY_SOURCES,
+  ['geeknews', 'wikidocs', 'itworld'],
+);
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -147,6 +155,28 @@ function toPositiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function toNonNegativeInteger(value, fallback) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseSourceList(value, fallback) {
+  const rawValues = Array.isArray(value) ? value : String(value || '').split(',');
+  const normalized = Array.from(
+    new Set(
+      rawValues
+        .map((entry) => String(entry || '').trim().toLowerCase())
+        .filter((entry) => entry && DAILY_SOURCE_COLLECTORS[entry]),
+    ),
+  );
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
 function parseDateInput(value) {
   if (!value) {
     return null;
@@ -187,7 +217,7 @@ function hasKeyword(text, keywords) {
 }
 
 function shouldIncludeDailyItem(item) {
-  const haystack = [item.title, item.contentSnippet, item.content, item.summary]
+  const haystack = [item.title, item.contentSnippet]
     .filter(Boolean)
     .join(' ');
 
@@ -586,16 +616,7 @@ async function postBackfillGroups(channel, groups, state) {
   return posted;
 }
 
-function parseHnMetrics(contentSnippet) {
-  const snippet = String(contentSnippet || '');
-  const pointsMatch = snippet.match(/Points:\s*(\d+)/i);
-  const commentsMatch = snippet.match(/# Comments:\s*(\d+)/i);
 
-  return {
-    points: Number.parseInt(pointsMatch?.[1] || '0', 10),
-    comments: Number.parseInt(commentsMatch?.[1] || '0', 10),
-  };
-}
 
 function canonicalizeUrl(rawUrl) {
   try {
@@ -701,12 +722,11 @@ function dedupeDailyEntries(entries) {
   );
 }
 
-async function collectDailyGeekNews(limit) {
+async function collectDailyGeekNews() {
   const feed = await parseRss('https://news.hada.io/rss/news');
+  const filteredItems = (feed.items || []).filter(shouldIncludeDailyItem);
 
-  return (feed.items || [])
-    .filter(shouldIncludeDailyItem)
-    .slice(0, limit)
+  return filteredItems
     .reverse()
     .map((item) => ({
       dedupeKey: `daily:geeknews:${item.guid || item.id || item.link}`,
@@ -719,31 +739,7 @@ async function collectDailyGeekNews(limit) {
     }));
 }
 
-async function collectDailyHackerNews(limit) {
-  const feed = await parseRss(`https://hnrss.org/newest?q=${encodeURIComponent(HN_QUERY)}`);
-
-  return (feed.items || [])
-    .filter(shouldIncludeDailyItem)
-    .slice(0, limit)
-    .reverse()
-    .map((item) => {
-    const metrics = parseHnMetrics(item.contentSnippet);
-
-    return {
-      dedupeKey: `daily:hackernews:${item.guid || item.id || item.link}`,
-      source: 'hackernews',
-      title: stripHtml(item.title),
-      url: item.link,
-      description: truncate(stripHtml(item.contentSnippet || ''), 350),
-      publishedAt: item.isoDate || item.pubDate || null,
-      metricLabel: `${metrics.points} points · ${metrics.comments} comments`,
-      commentsUrl: item.comments || null,
-      footer: `Hacker News | newest "${HN_QUERY}"`,
-    };
-  });
-}
-
-async function collectDailyWikiDocs(limit) {
+async function collectDailyWikiDocs() {
   const feeds = await Promise.all(
     WIKIDOCS_BOOKS.map(async (book) => {
       const feed = await parseRss(`https://wikidocs.net/book/${book.id}/rss/`);
@@ -769,10 +765,10 @@ async function collectDailyWikiDocs(limit) {
     .filter((item) => isRecentEnough(item.publishedAt, WIKIDOCS_MAX_AGE_DAYS))
     .filter(shouldIncludeDailyItem)
     .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime())
-    .slice(-limit);
+    ;
 }
 
-async function collectDailyItWorld(limit) {
+async function collectDailyItWorld() {
   const feed = await parseRss('https://www.itworld.co.kr/artificial-intelligence/feed/');
 
   return (feed.items || [])
@@ -789,7 +785,7 @@ async function collectDailyItWorld(limit) {
     .filter((item) => isRecentEnough(item.publishedAt, ITWORLD_MAX_AGE_DAYS))
     .filter(shouldIncludeDailyItem)
     .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime())
-    .slice(-limit);
+    ;
 }
 
 function parseGeekNewsPastPage(html, day) {
@@ -930,12 +926,12 @@ async function collectBackfillEntries(range) {
 }
 
 async function runDaily(channel, state) {
-  const [geekNewsEntries, wikiDocsEntries, itWorldEntries] = await Promise.all([
-    collectDailyGeekNews(DAILY_LIMIT),
-    collectDailyWikiDocs(WIKIDOCS_DAILY_LIMIT),
-    collectDailyItWorld(ITWORLD_DAILY_LIMIT),
-  ]);
-  const orderedEntries = dedupeDailyEntries([...geekNewsEntries, ...wikiDocsEntries, ...itWorldEntries]);
+  console.log(`Daily sources: ${DAILY_SOURCES.join(', ')}`);
+
+  const batches = await Promise.all(
+    DAILY_SOURCES.map(async (source) => DAILY_SOURCE_COLLECTORS[source]()),
+  );
+  const orderedEntries = dedupeDailyEntries(batches.flat());
 
   return postDailyEntries(channel, orderedEntries, state);
 }
