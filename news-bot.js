@@ -78,14 +78,7 @@ const WIKIDOCS_BOOKS = [
 const args = parseArgs(process.argv.slice(2));
 const MODE = (args._[0] || process.env.NEWS_BOT_MODE || 'daily').toLowerCase();
 const DRY_RUN = toBoolean(args['dry-run'], process.env.DRY_RUN);
-const WIKIDOCS_MAX_AGE_DAYS = toPositiveInteger(
-  args['wikidocs-max-age-days'] || process.env.WIKIDOCS_MAX_AGE_DAYS,
-  14,
-);
-const ITWORLD_MAX_AGE_DAYS = toPositiveInteger(
-  args['itworld-max-age-days'] || process.env.ITWORLD_MAX_AGE_DAYS,
-  7,
-);
+const NEWS_MAX_AGE_DAYS = 1.5;
 const BACKFILL_WEEKS = toPositiveInteger(args.weeks || process.env.NEWS_BACKFILL_WEEKS, 16);
 const BACKFILL_START_DATE = parseDateInput(args['start-date'] || process.env.NEWS_BACKFILL_START_DATE);
 const BACKFILL_END_DATE = parseDateInput(args['end-date'] || process.env.NEWS_BACKFILL_END_DATE);
@@ -724,7 +717,7 @@ function dedupeDailyEntries(entries) {
 
 async function collectDailyGeekNews() {
   const feed = await parseRss('https://news.hada.io/rss/news');
-  const filteredItems = (feed.items || []).filter(shouldIncludeDailyItem);
+  const filteredItems = (feed.items || []).filter(shouldIncludeDailyItem).filter(item => isRecentEnough(item.isoDate || item.pubDate, NEWS_MAX_AGE_DAYS));
 
   return filteredItems
     .reverse()
@@ -762,7 +755,7 @@ async function collectDailyWikiDocs() {
         footer: `WikiDocs | ${bookTitle}`,
       }));
     })
-    .filter((item) => isRecentEnough(item.publishedAt, WIKIDOCS_MAX_AGE_DAYS))
+    .filter((item) => isRecentEnough(item.publishedAt, NEWS_MAX_AGE_DAYS))
     .filter(shouldIncludeDailyItem)
     .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime())
     ;
@@ -782,7 +775,7 @@ async function collectDailyItWorld() {
       publishedAt: item.isoDate || item.pubDate || null,
       footer: 'ITWorld Korea | AI',
     }))
-    .filter((item) => isRecentEnough(item.publishedAt, ITWORLD_MAX_AGE_DAYS))
+    .filter((item) => isRecentEnough(item.publishedAt, NEWS_MAX_AGE_DAYS))
     .filter(shouldIncludeDailyItem)
     .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime())
     ;

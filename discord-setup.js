@@ -5,6 +5,34 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const OPEN_POSTING_CHANNEL_TYPES = new Set([ChannelType.GuildText, ChannelType.GuildForum]);
+
+function getOpenPostingPermissions(channelType) {
+  const permissions = {
+    ViewChannel: true,
+    ReadMessageHistory: true,
+    SendMessages: true,
+    AttachFiles: true
+  };
+
+  if (channelType === ChannelType.GuildForum) {
+    permissions.CreatePublicThreads = true;
+    permissions.SendMessagesInThreads = true;
+  }
+
+  return permissions;
+}
+
+async function ensureEveryoneCanPost(channel, guild) {
+  if (!OPEN_POSTING_CHANNEL_TYPES.has(channel.type)) {
+    return;
+  }
+
+  await channel.permissionOverwrites.edit(
+    guild.roles.everyone,
+    getOpenPostingPermissions(channel.type)
+  );
+}
 
 const STRUCTURE = [
   {
@@ -120,24 +148,15 @@ client.once('ready', async () => {
       for (const channelData of categoryData.channels) {
         const existingChannel = guild.channels.cache.find(c => c.name === channelData.name && c.parentId === category.id);
         if (!existingChannel) {
-          const permissionOverwrites = [];
-          
-          if (channelData.everyoneReadOnly) {
-            permissionOverwrites.push({
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.SendMessages],
-              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory]
-            });
-          }
-
-          await guild.channels.create({
+          const channel = await guild.channels.create({
             name: channelData.name,
             type: channelData.type,
             parent: category.id,
-            permissionOverwrites: permissionOverwrites.length > 0 ? permissionOverwrites : undefined
           });
+          await ensureEveryoneCanPost(channel, guild);
           console.log(`Created channel: ${channelData.name}`);
         } else {
+          await ensureEveryoneCanPost(existingChannel, guild);
           console.log(`Channel already exists: ${channelData.name}`);
         }
       }

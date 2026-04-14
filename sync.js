@@ -7,6 +7,34 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const OPEN_POSTING_CHANNEL_TYPES = new Set([ChannelType.GuildText, ChannelType.GuildForum]);
+
+function getOpenPostingPermissions(channelType) {
+  const permissions = {
+    ViewChannel: true,
+    ReadMessageHistory: true,
+    SendMessages: true,
+    AttachFiles: true
+  };
+
+  if (channelType === ChannelType.GuildForum) {
+    permissions.CreatePublicThreads = true;
+    permissions.SendMessagesInThreads = true;
+  }
+
+  return permissions;
+}
+
+async function ensureEveryoneCanPost(channel, guild) {
+  if (!OPEN_POSTING_CHANNEL_TYPES.has(channel.type)) {
+    return;
+  }
+
+  await channel.permissionOverwrites.edit(
+    guild.roles.everyone,
+    getOpenPostingPermissions(channel.type)
+  );
+}
 
 const STRUCTURE = [
   {
@@ -70,6 +98,8 @@ client.once('ready', async () => {
   try {
     console.log('Pinging Discord server...');
     const guild = await client.guilds.fetch(GUILD_ID);
+    await guild.channels.fetch();
+    await guild.roles.fetch();
 
     // Process STRUCTURE
     const allowedCategoryNames = new Set(STRUCTURE.map(c => c.name));
@@ -105,14 +135,6 @@ client.once('ready', async () => {
           // Role for Moderator
           const modRole = guild.roles.cache.find(r => r.name === "🛡️ 운영진");
 
-          if (chData.everyoneReadOnly) {
-            permissionOverwrites.push({
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.SendMessages],
-              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory]
-            });
-          }
-
           if (chData.modOnly && modRole) {
             permissionOverwrites.push({
               id: guild.roles.everyone.id,
@@ -138,6 +160,11 @@ client.once('ready', async () => {
             console.log(`Moved channel ${chData.name} to category ${catData.name}`);
           }
         }
+
+        if (!chData.modOnly) {
+          await ensureEveryoneCanPost(channel, guild);
+        }
+
         positionUpdates.push({ channel: channel.id, position: chPos });
         chPos++;
       }

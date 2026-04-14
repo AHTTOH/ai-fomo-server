@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "channels:unlock": "node unlock-channels.js",
     "news:daily": "node news-bot.js daily",
     "news:backfill": "node news-bot.js backfill",
     "test": "echo \"Error: no test specified\" && exit 1"
