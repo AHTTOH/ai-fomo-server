@@ -14,6 +14,11 @@ const GUILD_ID = process.env.GUILD_ID;
 const NEWS_CHANNEL_ID = process.env.NEWS_CHANNEL_ID || '';
 const NEWS_CHANNEL_NAME = process.env.NEWS_CHANNEL_NAME || '🤖-ai-뉴스-자동봇';
 const HISTORY_FILE = path.join(__dirname, 'news-history.json');
+const NOTION_API_KEY = process.env.NOTION_API || process.env.notion_api || '';
+const NOTION_CONTENT_DATABASE_ID =
+  process.env.NOTION_CONTENT_DATABASE_ID || '38117151-8081-4022-9cc5-e50f22dbf43e';
+const NOTION_NEWS_PARENT_PAGE_ID =
+  process.env.NOTION_NEWS_PARENT_PAGE_ID || '347295fe-0af7-81f1-936c-ce695164af58';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_ALLOW_KEYWORDS = [
@@ -91,8 +96,35 @@ const DAILY_SOURCES = parseSourceList(
   args.sources || process.env.NEWS_DAILY_SOURCES,
   ['geeknews', 'wikidocs', 'itworld'],
 );
+const NEWS_OUTPUTS = parseOutputList(args.output || process.env.NEWS_OUTPUT, ['discord']);
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const NOTION_PAGE_CACHE = new Map();
+const NOTION_PROPS = {
+  title: '\uC81C\uBAA9',
+  type: '\uC720\uD615',
+  channel: '\uCC44\uB110',
+  dedupeKey: '\uC911\uBCF5\uD0A4',
+  summary: '\uC694\uC57D',
+  sourceUrl: '\uC18C\uC2A4 URL',
+  project: '\uD504\uB85C\uC81D\uD2B8',
+  status: '\uC0C1\uD0DC',
+  category: '\uB300\uBD84\uB958',
+  group: '\uBB36\uC74C',
+  source: '\uCD9C\uCC98',
+  collectedDate: '\uC218\uC9D1\uC77C',
+  originalPage: '\uC6D0\uBB38 \uD398\uC774\uC9C0',
+  summaryPage: '\uC694\uC57D \uD398\uC774\uC9C0',
+  hermesTask: 'Hermes \uC791\uC5C5',
+};
+const NOTION_VALUES = {
+  category: '\uAE00\uAC10',
+  group: '\uB274\uC2A4 \uC2A4\uD06C\uB798\uD551',
+  project: 'AI FOMO',
+  type: '\uAE00\uAC10',
+  statusCollected: '\uC6D0\uBCF8\uC218\uC9D1\uB428',
+  hermesQueued: '\uC694\uC57D \uB300\uAE30',
+};
 
 function parseArgs(argv) {
   const parsed = { _: [] };
@@ -168,6 +200,24 @@ function parseSourceList(value, fallback) {
   );
 
   return normalized.length > 0 ? normalized : fallback;
+}
+
+function parseOutputList(value, fallback) {
+  const allowed = new Set(['discord', 'notion']);
+  const rawValues = Array.isArray(value) ? value : String(value || '').split(',');
+  const normalized = Array.from(
+    new Set(
+      rawValues
+        .map((entry) => String(entry || '').trim().toLowerCase())
+        .filter((entry) => allowed.has(entry)),
+    ),
+  );
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function usesOutput(output) {
+  return NEWS_OUTPUTS.includes(output);
 }
 
 function parseDateInput(value) {
@@ -469,6 +519,288 @@ async function fetchText(url, timeoutMs = 20000) {
 async function parseRss(url) {
   const xml = await fetchText(url, 25000);
   return parser.parseString(xml);
+}
+
+function notionText(content, maxLength = 2000) {
+  return [
+    {
+      type: 'text',
+      text: {
+        content: truncate(String(content || ''), maxLength),
+      },
+    },
+  ];
+}
+
+function notionTitle(content) {
+  return notionText(content || 'Untitled', 2000);
+}
+
+function notionSourceLabel(source) {
+  return SOURCE_META[source]?.label || source;
+}
+
+function notionCollectionDate() {
+  return formatDate(new Date());
+}
+
+async function notionRequest(pathname, options = {}) {
+  if (!NOTION_API_KEY) {
+    throw new Error('NOTION_API or notion_api must be set for Notion output.');
+  }
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetch(`https://api.notion.com/v1${pathname}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (response.ok) {
+      return body;
+    }
+
+    if (response.status === 429 && attempt < 3) {
+      const retryAfterSeconds = Number.parseInt(response.headers.get('retry-after') || '1', 10);
+      await sleep(Math.max(1, retryAfterSeconds) * 1000);
+      continue;
+    }
+
+    throw new Error(`Notion API ${response.status}: ${JSON.stringify(body)}`);
+  }
+
+  throw new Error('Notion API request failed after retries.');
+}
+
+function notionBlockTitle(block) {
+  if (block.type === 'child_page') {
+    return block.child_page.title;
+  }
+
+  const value = block[block.type] || {};
+  return (value.rich_text || []).map((entry) => entry.plain_text).join('');
+}
+
+async function findNotionChildPage(parentPageId, title) {
+  const cacheKey = `${parentPageId}:${title}`;
+  if (NOTION_PAGE_CACHE.has(cacheKey)) {
+    return NOTION_PAGE_CACHE.get(cacheKey);
+  }
+
+  let cursor = null;
+  do {
+    const query = cursor ? `?page_size=100&start_cursor=${cursor}` : '?page_size=100';
+    const response = await notionRequest(`/blocks/${parentPageId}/children${query}`);
+    const found = response.results.find(
+      (block) => block.type === 'child_page' && notionBlockTitle(block) === title,
+    );
+
+    if (found) {
+      NOTION_PAGE_CACHE.set(cacheKey, found.id);
+      return found.id;
+    }
+
+    cursor = response.has_more ? response.next_cursor : null;
+  } while (cursor);
+
+  return null;
+}
+
+async function ensureNotionChildPage(parentPageId, title, children = []) {
+  const existing = await findNotionChildPage(parentPageId, title);
+  if (existing) {
+    return { id: existing, url: null, created: false };
+  }
+
+  const created = await notionRequest('/pages', {
+    method: 'POST',
+    body: JSON.stringify({
+      parent: { page_id: parentPageId },
+      properties: {
+        title: {
+          title: notionTitle(title),
+        },
+      },
+      children,
+    }),
+  });
+
+  NOTION_PAGE_CACHE.set(`${parentPageId}:${title}`, created.id);
+  return { id: created.id, url: created.url, created: true };
+}
+
+async function findNotionContentByDedupeKey(dedupeKey) {
+  const response = await notionRequest(`/databases/${NOTION_CONTENT_DATABASE_ID}/query`, {
+    method: 'POST',
+    body: JSON.stringify({
+      page_size: 1,
+      filter: {
+        property: NOTION_PROPS.dedupeKey,
+        rich_text: {
+          equals: dedupeKey,
+        },
+      },
+    }),
+  });
+
+  return response.results[0] || null;
+}
+
+function buildNotionArticleBlocks(entry, collectionDate) {
+  const blocks = [
+    {
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: notionText(`Source: ${notionSourceLabel(entry.source)} | Collected: ${collectionDate}`),
+      },
+    },
+    {
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text',
+            text: {
+              content: 'Original URL',
+              link: { url: entry.url },
+            },
+          },
+        ],
+      },
+    },
+  ];
+
+  if (entry.publishedAt) {
+    blocks.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: notionText(`Published: ${entry.publishedAt}`),
+      },
+    });
+  }
+
+  if (entry.description) {
+    blocks.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: notionText(entry.description),
+      },
+    });
+  }
+
+  return blocks;
+}
+
+async function createNotionArticlePage(entry, collectionDate) {
+  const sourcePage = await ensureNotionChildPage(
+    NOTION_NEWS_PARENT_PAGE_ID,
+    notionSourceLabel(entry.source),
+  );
+  const datePage = await ensureNotionChildPage(sourcePage.id, collectionDate);
+
+  return notionRequest('/pages', {
+    method: 'POST',
+    body: JSON.stringify({
+      parent: { page_id: datePage.id },
+      properties: {
+        title: {
+          title: notionTitle(entry.title),
+        },
+      },
+      children: buildNotionArticleBlocks(entry, collectionDate),
+    }),
+  });
+}
+
+async function createNotionContentRow(entry, articlePage, collectionDate) {
+  const properties = {
+    [NOTION_PROPS.title]: {
+      title: notionTitle(entry.title),
+    },
+    [NOTION_PROPS.type]: {
+      select: { name: NOTION_VALUES.type },
+    },
+    [NOTION_PROPS.dedupeKey]: {
+      rich_text: notionText(entry.dedupeKey),
+    },
+    [NOTION_PROPS.summary]: {
+      rich_text: notionText(entry.description || ''),
+    },
+    [NOTION_PROPS.sourceUrl]: {
+      url: entry.url || null,
+    },
+    [NOTION_PROPS.project]: {
+      select: { name: NOTION_VALUES.project },
+    },
+    [NOTION_PROPS.status]: {
+      select: { name: NOTION_VALUES.statusCollected },
+    },
+    [NOTION_PROPS.category]: {
+      select: { name: NOTION_VALUES.category },
+    },
+    [NOTION_PROPS.group]: {
+      select: { name: NOTION_VALUES.group },
+    },
+    [NOTION_PROPS.source]: {
+      select: { name: notionSourceLabel(entry.source) },
+    },
+    [NOTION_PROPS.collectedDate]: {
+      date: { start: collectionDate },
+    },
+    [NOTION_PROPS.originalPage]: {
+      url: articlePage.url || null,
+    },
+    [NOTION_PROPS.hermesTask]: {
+      rich_text: notionText(NOTION_VALUES.hermesQueued),
+    },
+  };
+
+  return notionRequest('/pages', {
+    method: 'POST',
+    body: JSON.stringify({
+      parent: { database_id: NOTION_CONTENT_DATABASE_ID },
+      properties,
+    }),
+  });
+}
+
+async function saveDailyEntriesToNotion(entries, state) {
+  const posted = [];
+  const collectionDate = notionCollectionDate();
+
+  for (const entry of entries) {
+    if (state.posted.daily.includes(entry.dedupeKey)) {
+      continue;
+    }
+
+    const existing = await findNotionContentByDedupeKey(entry.dedupeKey);
+    if (existing) {
+      state.posted.daily.push(entry.dedupeKey);
+      continue;
+    }
+
+    if (DRY_RUN) {
+      console.log(`[dry-run][notion][daily] ${entry.source} :: ${entry.title}`);
+    } else {
+      const articlePage = await createNotionArticlePage(entry, collectionDate);
+      await createNotionContentRow(entry, articlePage, collectionDate);
+      state.posted.daily.push(entry.dedupeKey);
+      await sleep(350);
+    }
+
+    posted.push(entry);
+  }
+
+  return posted;
 }
 
 async function getTargetChannel() {
@@ -926,7 +1258,17 @@ async function runDaily(channel, state) {
   );
   const orderedEntries = dedupeDailyEntries(batches.flat());
 
-  return postDailyEntries(channel, orderedEntries, state);
+  const posted = [];
+
+  if (usesOutput('notion')) {
+    posted.push(...await saveDailyEntriesToNotion(orderedEntries, state));
+  }
+
+  if (usesOutput('discord')) {
+    posted.push(...await postDailyEntries(channel, orderedEntries, state));
+  }
+
+  return posted;
 }
 
 async function runBackfill(channel, state) {
@@ -942,34 +1284,49 @@ async function runBackfill(channel, state) {
 }
 
 async function main() {
-  if (!BOT_TOKEN || !GUILD_ID) {
+  if (usesOutput('discord') && (!BOT_TOKEN || !GUILD_ID)) {
     throw new Error('BOT_TOKEN and GUILD_ID must be set.');
+  }
+
+  if (usesOutput('notion') && !NOTION_API_KEY) {
+    throw new Error('NOTION_API or notion_api must be set.');
   }
 
   if (!['daily', 'backfill'].includes(MODE)) {
     throw new Error(`Unsupported mode: ${MODE}`);
   }
 
+  if (MODE === 'backfill' && usesOutput('notion')) {
+    throw new Error('Notion output is supported for daily mode only.');
+  }
+
   const state = loadState();
-  const channel = await getTargetChannel();
+  const channel = usesOutput('discord') ? await getTargetChannel() : null;
   const posted = MODE === 'daily' ? await runDaily(channel, state) : await runBackfill(channel, state);
 
   if (!DRY_RUN) {
     saveState(state);
   }
 
-  console.log(`${MODE} completed. posted=${posted.length} dryRun=${DRY_RUN}`);
+  console.log(`${MODE} completed. outputs=${NEWS_OUTPUTS.join(',')} posted=${posted.length} dryRun=${DRY_RUN}`);
 }
 
-client.once('clientReady', async () => {
-  try {
-    await main();
-  } catch (error) {
+if (usesOutput('discord')) {
+  client.once('clientReady', async () => {
+    try {
+      await main();
+    } catch (error) {
+      console.error(error);
+      process.exitCode = 1;
+    } finally {
+      client.destroy();
+    }
+  });
+
+  client.login(BOT_TOKEN);
+} else {
+  main().catch((error) => {
     console.error(error);
     process.exitCode = 1;
-  } finally {
-    client.destroy();
-  }
-});
-
-client.login(BOT_TOKEN);
+  });
+}

@@ -2,7 +2,7 @@ name: AI News Auto Bot
 
 on:
   schedule:
-    - cron: '30 22 * * *' # 07:30 KST every day
+    - cron: '30 22,6,14 * * *' # 07:30, 15:30, 23:30 KST every day
   workflow_dispatch:
     inputs:
       mode:
@@ -48,6 +48,9 @@ jobs:
       TZ: Asia/Seoul
       NEWS_BOT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'daily' }}
       NEWS_DAILY_SOURCES: geeknews,wikidocs,itworld
+      NEWS_OUTPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill' && 'discord' || 'notion' }}
+      NOTION_CONTENT_DATABASE_ID: 38117151-8081-4022-9cc5-e50f22dbf43e
+      NOTION_NEWS_PARENT_PAGE_ID: 347295fe-0af7-81f1-936c-ce695164af58
       NEWS_BACKFILL_WEEKS: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_weeks || '16' }}
       NEWS_BACKFILL_START_DATE: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_start_date || '' }}
       NEWS_BACKFILL_END_DATE: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_end_date || '' }}
@@ -67,6 +70,7 @@ jobs:
 
       - name: Run news bot
         env:
+          NOTION_API: ${{ secrets.NOTION_API }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           GUILD_ID: ${{ secrets.GUILD_ID }}
           NEWS_CHANNEL_ID: ${{ secrets.NEWS_CHANNEL_ID }}
