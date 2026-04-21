@@ -2,7 +2,7 @@ name: AI News Auto Bot
 
 on:
   schedule:
-    - cron: '30 22,6,14 * * *' # 07:30, 15:30, 23:30 KST every day
+    - cron: '0 21,5,13 * * *' # 06:00, 14:00, 22:00 KST every day
   workflow_dispatch:
     inputs:
       mode:
