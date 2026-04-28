@@ -441,7 +441,12 @@
       "daily:geeknews:https://news.hada.io/topic?id=28970",
       "daily:geeknews:https://news.hada.io/topic?id=28971",
       "daily:geeknews:https://news.hada.io/topic?id=28972",
-      "daily:itworld:https://www.itworld.co.kr/article/4163976/%ea%b7%9c%ec%a0%9c-%eb%a7%8e%ec%9d%80-%ea%b8%b0%ec%97%85-%ed%99%98%ea%b2%bd-%ea%b2%a8%eb%83%a5%ec%98%a4%ed%94%88%ed%85%8d%ec%8a%a4%ed%8a%b8-%ec%98%a4%ed%94%84%eb%9d%bc%ec%9d%b8-%ec%95%b1.html"
+      "daily:itworld:https://www.itworld.co.kr/article/4163976/%ea%b7%9c%ec%a0%9c-%eb%a7%8e%ec%9d%80-%ea%b8%b0%ec%97%85-%ed%99%98%ea%b2%bd-%ea%b2%a8%eb%83%a5%ec%98%a4%ed%94%88%ed%85%8d%ec%8a%a4%ed%8a%b8-%ec%98%a4%ed%94%84%eb%9d%bc%ec%9d%b8-%ec%95%b1.html",
+      "daily:geeknews:https://news.hada.io/topic?id=28973",
+      "daily:geeknews:https://news.hada.io/topic?id=28974",
+      "daily:geeknews:https://news.hada.io/topic?id=28975",
+      "daily:geeknews:https://news.hada.io/topic?id=28976",
+      "daily:geeknews:https://news.hada.io/topic?id=28977"
     ],
     "backfill": [
       "backfill:geeknews:2026년 1월 1주차 (2025-12-29 ~ 2026-01-04):attention:25462",
