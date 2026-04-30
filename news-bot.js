@@ -911,6 +911,22 @@ async function createNotionContentRow(entry, articlePage, collectionDate) {
   });
 }
 
+async function queueExistingNotionContentForHermes(pageId) {
+  return notionRequest(`/pages/${pageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      properties: {
+        [NOTION_PROPS.channel]: {
+          multi_select: NOTION_CHANNELS.map((name) => ({ name })),
+        },
+        [NOTION_PROPS.hermesTask]: {
+          rich_text: notionText(NOTION_VALUES.hermesQueued),
+        },
+      },
+    }),
+  });
+}
+
 async function saveDailyEntriesToNotion(entries, state) {
   const posted = [];
   const collectionDate = notionCollectionDate();
@@ -922,6 +938,7 @@ async function saveDailyEntriesToNotion(entries, state) {
 
     const existing = await findNotionContentByDedupeKey(entry.dedupeKey);
     if (existing) {
+      await queueExistingNotionContentForHermes(existing.id);
       markPostedDaily(state, 'notion', entry);
       continue;
     }
