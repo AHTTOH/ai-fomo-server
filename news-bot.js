@@ -143,6 +143,7 @@ const WIKIDOCS_BOOKS = [
 const args = parseArgs(process.argv.slice(2));
 const MODE = (args._[0] || process.env.NEWS_BOT_MODE || 'daily').toLowerCase();
 const DRY_RUN = toBoolean(args['dry-run'], process.env.DRY_RUN);
+const NEWS_ALLOW_RAW_DISCORD = toBoolean(args['allow-raw-discord'], process.env.NEWS_ALLOW_RAW_DISCORD);
 const NEWS_MAX_AGE_DAYS = 1.5;
 const NEWS_DISCORD_MAX_ENTRIES = toNonNegativeInteger(
   args['discord-max-entries'] || process.env.NEWS_DISCORD_MAX_ENTRIES,
@@ -199,6 +200,7 @@ const NOTION_VALUES = {
   statusCollected: '\uC6D0\uBCF8\uC218\uC9D1\uB428',
   hermesQueued: '\uC694\uC57D \uB300\uAE30',
 };
+const NOTION_CHANNELS = ['Notion', 'Discord', 'Blog'];
 
 function parseArgs(argv) {
   const parsed = { _: [] };
@@ -853,6 +855,9 @@ async function createNotionContentRow(entry, articlePage, collectionDate) {
     [NOTION_PROPS.type]: {
       select: { name: NOTION_VALUES.type },
     },
+    [NOTION_PROPS.channel]: {
+      multi_select: NOTION_CHANNELS.map((name) => ({ name })),
+    },
     [NOTION_PROPS.dedupeKey]: {
       rich_text: notionText(entry.dedupeKey),
     },
@@ -1023,6 +1028,10 @@ function buildEmbed(entry) {
 }
 
 async function postDailyEntries(channel, entries, state) {
+  if (!NEWS_ALLOW_RAW_DISCORD) {
+    throw new Error('Daily Discord output is disabled because it posts raw source embeds. Queue Hermes via Notion/Blog instead.');
+  }
+
   const posted = [];
   const pendingEntries = entries.filter((entry) => !hasPostedDaily(state, 'discord', entry));
   const selectedEntries = pendingEntries.slice(-NEWS_DISCORD_MAX_ENTRIES);
