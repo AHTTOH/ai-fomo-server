@@ -144,6 +144,10 @@ const args = parseArgs(process.argv.slice(2));
 const MODE = (args._[0] || process.env.NEWS_BOT_MODE || 'daily').toLowerCase();
 const DRY_RUN = toBoolean(args['dry-run'], process.env.DRY_RUN);
 const NEWS_MAX_AGE_DAYS = 1.5;
+const NEWS_DISCORD_MAX_ENTRIES = toNonNegativeInteger(
+  args['discord-max-entries'] || process.env.NEWS_DISCORD_MAX_ENTRIES,
+  8,
+);
 const BACKFILL_WEEKS = toPositiveInteger(args.weeks || process.env.NEWS_BACKFILL_WEEKS, 16);
 const BACKFILL_START_DATE = parseDateInput(args['start-date'] || process.env.NEWS_BACKFILL_START_DATE);
 const BACKFILL_END_DATE = parseDateInput(args['end-date'] || process.env.NEWS_BACKFILL_END_DATE);
@@ -1020,12 +1024,18 @@ function buildEmbed(entry) {
 
 async function postDailyEntries(channel, entries, state) {
   const posted = [];
+  const pendingEntries = entries.filter((entry) => !hasPostedDaily(state, 'discord', entry));
+  const selectedEntries = pendingEntries.slice(-NEWS_DISCORD_MAX_ENTRIES);
+  const skippedEntries = pendingEntries.slice(0, Math.max(0, pendingEntries.length - selectedEntries.length));
 
-  for (const entry of entries) {
-    if (hasPostedDaily(state, 'discord', entry)) {
-      continue;
-    }
+  if (skippedEntries.length > 0) {
+    console.log(`[discord][daily] skipped ${skippedEntries.length} older entries because NEWS_DISCORD_MAX_ENTRIES=${NEWS_DISCORD_MAX_ENTRIES}`);
+    skippedEntries.forEach((entry) => {
+      markPostedDaily(state, 'discord', entry);
+    });
+  }
 
+  for (const entry of selectedEntries) {
     if (DRY_RUN) {
       console.log(`[dry-run][daily] ${entry.source} :: ${entry.title}`);
     } else {
