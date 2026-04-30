@@ -24,6 +24,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DAILY_ALLOW_KEYWORDS = [
   'ai', 'llm', 'ml', 'gpt', 'agent', 'agents', 'rag', 'mcp',
   'openai', 'anthropic', 'claude', 'gemini', 'copilot', 'prompt',
+  'open source', 'opensource', '오픈소스', '오픈 소스',
+  'cli', 'terminal', 'devtool', 'developer tool',
   'inference', 'model', 'models', 'api', 'sdk', 'developer',
   'development', 'software', 'engineering', 'engineer', 'programming',
   'code', 'coding', 'database', 'cloud', 'infra', 'security', 'startup',
@@ -52,18 +54,67 @@ const SOURCE_META = {
   geeknews: {
     label: 'GeekNews',
     color: 0xff6600,
+    domain: 'AI',
   },
   hackernews: {
     label: 'Hacker News',
     color: 0xffa500,
+    domain: 'AI',
   },
   wikidocs: {
     label: 'WikiDocs',
     color: 0x22aa99,
+    domain: 'AI',
   },
   itworld: {
     label: 'ITWorld Korea',
     color: 0x0077cc,
+    domain: 'AI',
+  },
+  hrdive: {
+    label: 'HR Dive',
+    color: 0xb22222,
+    domain: 'HR',
+  },
+  hrexecutive: {
+    label: 'HR Executive',
+    color: 0x4b6584,
+    domain: 'HR',
+  },
+  personneltoday: {
+    label: 'Personnel Today',
+    color: 0x2f855a,
+    domain: 'HR',
+  },
+  hcaus: {
+    label: 'Human Resources Director America',
+    color: 0x8b5cf6,
+    domain: 'HR',
+  },
+  hcaca: {
+    label: 'Human Resources Director Canada',
+    color: 0x6d28d9,
+    domain: 'HR',
+  },
+  hcaau: {
+    label: 'Human Resources Director Australia',
+    color: 0x7c3aed,
+    domain: 'HR',
+  },
+  hcaasia: {
+    label: 'Human Resources Director Asia',
+    color: 0x5b21b6,
+    domain: 'HR',
+  },
+  hrreporter: {
+    label: 'Canadian HR Reporter',
+    color: 0x0f766e,
+    domain: 'HR',
+  },
+  hrmasia: {
+    label: 'HRM Asia',
+    color: 0x0ea5e9,
+    domain: 'HR',
   },
 };
 
@@ -71,6 +122,15 @@ const SOURCE_PRIORITY = {
   geeknews: 3,
   itworld: 2,
   wikidocs: 1,
+  hrdive: 3,
+  hrexecutive: 2,
+  personneltoday: 2,
+  hcaus: 2,
+  hcaca: 2,
+  hcaau: 2,
+  hcaasia: 2,
+  hrreporter: 2,
+  hrmasia: 2,
 };
 
 const WIKIDOCS_BOOKS = [
@@ -91,10 +151,19 @@ const DAILY_SOURCE_COLLECTORS = {
   geeknews: () => collectDailyGeekNews(),
   wikidocs: () => collectDailyWikiDocs(),
   itworld: () => collectDailyItWorld(),
+  hrdive: () => collectDailyFeedSource('hrdive', 'https://www.hrdive.com/feeds/news/', 'HR Dive | Latest News'),
+  hrexecutive: () => collectDailyFeedSource('hrexecutive', 'https://hrexecutive.com/feed/', 'HR Executive'),
+  personneltoday: () => collectDailyFeedSource('personneltoday', 'https://www.personneltoday.com/feed/', 'Personnel Today'),
+  hcaus: () => collectDailyFeedSource('hcaus', 'https://www.hcamag.com/us/rss', 'Human Resources Director America'),
+  hcaca: () => collectDailyFeedSource('hcaca', 'https://www.hcamag.com/ca/rss', 'Human Resources Director Canada'),
+  hcaau: () => collectDailyFeedSource('hcaau', 'https://www.hcamag.com/au/rss', 'Human Resources Director Australia'),
+  hcaasia: () => collectDailyFeedSource('hcaasia', 'https://www.hcamag.com/asia/rss', 'Human Resources Director Asia'),
+  hrreporter: () => collectDailyFeedSource('hrreporter', 'https://www.hrreporter.com/rss', 'Canadian HR Reporter'),
+  hrmasia: () => collectDailyFeedSource('hrmasia', 'https://hrmasia.com/feed/', 'HRM Asia'),
 };
 const DAILY_SOURCES = parseSourceList(
   args.sources || process.env.NEWS_DAILY_SOURCES,
-  ['geeknews', 'wikidocs', 'itworld'],
+  ['geeknews', 'wikidocs', 'itworld', 'hrdive', 'hrexecutive', 'personneltoday', 'hcaus', 'hcaca', 'hcaau', 'hcaasia', 'hrreporter', 'hrmasia'],
 );
 const NEWS_OUTPUTS = parseOutputList(args.output || process.env.NEWS_OUTPUT, ['discord']);
 
@@ -109,6 +178,7 @@ const NOTION_PROPS = {
   sourceUrl: '\uC18C\uC2A4 URL',
   project: '\uD504\uB85C\uC81D\uD2B8',
   status: '\uC0C1\uD0DC',
+  domain: '\uBD84\uC57C',
   category: '\uB300\uBD84\uB958',
   group: '\uBB36\uC74C',
   source: '\uCD9C\uCC98',
@@ -259,12 +329,31 @@ function hasKeyword(text, keywords) {
   return keywords.some((keyword) => normalized.includes(keyword));
 }
 
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasBlockKeyword(text, keywords) {
+  const normalized = normalizeText(text);
+
+  return keywords.some((keyword) => {
+    const normalizedKeyword = normalizeText(keyword);
+
+    if (/^[a-z0-9][a-z0-9\s-]*[a-z0-9]$/.test(normalizedKeyword)) {
+      const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalizedKeyword)}($|[^a-z0-9])`);
+      return pattern.test(normalized);
+    }
+
+    return normalized.includes(normalizedKeyword);
+  });
+}
+
 function shouldIncludeDailyItem(item) {
   const haystack = [item.title, item.contentSnippet]
     .filter(Boolean)
     .join(' ');
 
-  if (hasKeyword(haystack, DAILY_BLOCK_KEYWORDS)) {
+  if (hasBlockKeyword(haystack, DAILY_BLOCK_KEYWORDS)) {
     return false;
   }
 
@@ -540,6 +629,19 @@ function notionSourceLabel(source) {
   return SOURCE_META[source]?.label || source;
 }
 
+function notionSourceDomain(source) {
+  return SOURCE_META[source]?.domain || null;
+}
+
+function notionSourcePageTitle(source) {
+  const meta = SOURCE_META[source];
+  if (!meta) {
+    return source;
+  }
+
+  return meta.domain ? `[${meta.domain}] ${meta.label}` : meta.label;
+}
+
 function notionCollectionDate() {
   return formatDate(new Date());
 }
@@ -703,7 +805,7 @@ function buildNotionArticleBlocks(entry, collectionDate) {
 async function createNotionArticlePage(entry, collectionDate) {
   const sourcePage = await ensureNotionChildPage(
     NOTION_NEWS_PARENT_PAGE_ID,
-    notionSourceLabel(entry.source),
+    notionSourcePageTitle(entry.source),
   );
   const datePage = await ensureNotionChildPage(sourcePage.id, collectionDate);
 
@@ -744,6 +846,9 @@ async function createNotionContentRow(entry, articlePage, collectionDate) {
     [NOTION_PROPS.status]: {
       select: { name: NOTION_VALUES.statusCollected },
     },
+    [NOTION_PROPS.domain]: notionSourceDomain(entry.source)
+      ? { select: { name: notionSourceDomain(entry.source) } }
+      : undefined,
     [NOTION_PROPS.category]: {
       select: { name: NOTION_VALUES.category },
     },
@@ -763,6 +868,12 @@ async function createNotionContentRow(entry, articlePage, collectionDate) {
       rich_text: notionText(NOTION_VALUES.hermesQueued),
     },
   };
+
+  Object.keys(properties).forEach((key) => {
+    if (properties[key] === undefined) {
+      delete properties[key];
+    }
+  });
 
   return notionRequest('/pages', {
     method: 'POST',
@@ -1111,6 +1222,29 @@ async function collectDailyItWorld() {
     .filter(shouldIncludeDailyItem)
     .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime())
     ;
+}
+
+async function collectDailyFeedSource(source, url, footerLabel) {
+  const feed = await parseRss(url);
+
+  return (feed.items || [])
+    .map((item) => ({
+      dedupeKey: `daily:${source}:${item.guid || item.id || item.link}`,
+      source,
+      title: stripHtml(item.title),
+      url: item.link,
+      description: truncate(stripHtml(item.contentSnippet || item.content || item.summary || item.description || ''), 350),
+      contentSnippet: stripHtml([
+        item.contentSnippet,
+        item.summary,
+        item.categories?.join(' '),
+      ].filter(Boolean).join(' ')),
+      publishedAt: item.isoDate || item.pubDate || null,
+      footer: footerLabel,
+    }))
+    .filter((item) => item.title && item.url)
+    .filter((item) => isRecentEnough(item.publishedAt, NEWS_MAX_AGE_DAYS))
+    .sort((left, right) => new Date(left.publishedAt || 0).getTime() - new Date(right.publishedAt || 0).getTime());
 }
 
 function parseGeekNewsPastPage(html, day) {

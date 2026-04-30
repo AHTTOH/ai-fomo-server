@@ -1,0 +1,61 @@
+name: HR News Auto Bot
+
+on:
+  schedule:
+    - cron: '0 21 * * *' # 06:00 KST every day
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Collect only, do not write to Notion'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hr-news-auto-bot
+  cancel-in-progress: false
+
+jobs:
+  fetch-news:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Seoul
+      NEWS_BOT_MODE: daily
+      NEWS_DAILY_SOURCES: hrdive,hrexecutive,personneltoday,hcaus,hcaca,hcaau,hcaasia,hrreporter,hrmasia
+      NEWS_OUTPUT: notion
+      NOTION_CONTENT_DATABASE_ID: 38117151-8081-4022-9cc5-e50f22dbf43e
+      NOTION_NEWS_PARENT_PAGE_ID: 347295fe-0af7-81f1-936c-ce695164af58
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run news bot
+        env:
+          NOTION_API: ${{ secrets.NOTION_API }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          NEWS_CHANNEL_ID: ${{ secrets.NEWS_CHANNEL_ID }}
+          NEWS_CHANNEL_NAME: ${{ secrets.NEWS_CHANNEL_NAME }}
+        run: node news-bot.js "${NEWS_BOT_MODE}"
+
+      - name: Persist bot history
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add news-history.json
+          git commit -m "Update HR news bot history" || echo "No changes to commit"
+          git push
+        continue-on-error: true
