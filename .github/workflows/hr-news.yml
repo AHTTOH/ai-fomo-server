@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Collect only, do not write to Notion'
+        description: 'Collect only, do not write to Notion or Discord'
         required: false
         default: false
         type: boolean
@@ -25,7 +25,7 @@ jobs:
       TZ: Asia/Seoul
       NEWS_BOT_MODE: daily
       NEWS_DAILY_SOURCES: hrdive,hrexecutive,personneltoday,hcaus,hcaca,hcaau,hcaasia,hrreporter,hrmasia
-      NEWS_OUTPUT: notion
+      NEWS_OUTPUT: notion,discord,blog
       NOTION_CONTENT_DATABASE_ID: 38117151-8081-4022-9cc5-e50f22dbf43e
       NOTION_NEWS_PARENT_PAGE_ID: 347295fe-0af7-81f1-936c-ce695164af58
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}

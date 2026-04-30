@@ -273,7 +273,7 @@ function parseSourceList(value, fallback) {
 }
 
 function parseOutputList(value, fallback) {
-  const allowed = new Set(['discord', 'notion']);
+  const allowed = new Set(['discord', 'notion', 'blog']);
   const rawValues = Array.isArray(value) ? value : String(value || '').split(',');
   const normalized = Array.from(
     new Set(
@@ -283,11 +283,29 @@ function parseOutputList(value, fallback) {
     ),
   );
 
-  return normalized.length > 0 ? normalized : fallback;
+  const outputs = normalized.length > 0 ? normalized : fallback;
+
+  if (outputs.includes('blog') && !outputs.includes('notion')) {
+    outputs.push('notion');
+  }
+
+  return outputs;
 }
 
 function usesOutput(output) {
   return NEWS_OUTPUTS.includes(output);
+}
+
+function dailyOutputKey(output, entry) {
+  return `${output}:${entry.dedupeKey}`;
+}
+
+function hasPostedDaily(state, output, entry) {
+  return state.posted.daily.includes(dailyOutputKey(output, entry));
+}
+
+function markPostedDaily(state, output, entry) {
+  state.posted.daily.push(dailyOutputKey(output, entry));
 }
 
 function parseDateInput(value) {
@@ -889,13 +907,13 @@ async function saveDailyEntriesToNotion(entries, state) {
   const collectionDate = notionCollectionDate();
 
   for (const entry of entries) {
-    if (state.posted.daily.includes(entry.dedupeKey)) {
+    if (hasPostedDaily(state, 'notion', entry)) {
       continue;
     }
 
     const existing = await findNotionContentByDedupeKey(entry.dedupeKey);
     if (existing) {
-      state.posted.daily.push(entry.dedupeKey);
+      markPostedDaily(state, 'notion', entry);
       continue;
     }
 
@@ -904,7 +922,7 @@ async function saveDailyEntriesToNotion(entries, state) {
     } else {
       const articlePage = await createNotionArticlePage(entry, collectionDate);
       await createNotionContentRow(entry, articlePage, collectionDate);
-      state.posted.daily.push(entry.dedupeKey);
+      markPostedDaily(state, 'notion', entry);
       await sleep(350);
     }
 
@@ -1004,7 +1022,7 @@ async function postDailyEntries(channel, entries, state) {
   const posted = [];
 
   for (const entry of entries) {
-    if (state.posted.daily.includes(entry.dedupeKey)) {
+    if (hasPostedDaily(state, 'discord', entry)) {
       continue;
     }
 
@@ -1012,7 +1030,7 @@ async function postDailyEntries(channel, entries, state) {
       console.log(`[dry-run][daily] ${entry.source} :: ${entry.title}`);
     } else {
       await channel.send({ embeds: [buildEmbed(entry)] });
-      state.posted.daily.push(entry.dedupeKey);
+      markPostedDaily(state, 'discord', entry);
     }
 
     posted.push(entry);
