@@ -966,7 +966,10 @@
       "notion:daily:geeknews:https://news.hada.io/topic?id=29456",
       "notion:daily:geeknews:https://news.hada.io/topic?id=29459",
       "notion:daily:geeknews:https://news.hada.io/topic?id=29461",
-      "notion:daily:geeknews:https://news.hada.io/topic?id=29462"
+      "notion:daily:geeknews:https://news.hada.io/topic?id=29462",
+      "notion:daily:geeknews:https://news.hada.io/topic?id=29465",
+      "notion:daily:geeknews:https://news.hada.io/topic?id=29466",
+      "notion:daily:geeknews:https://news.hada.io/topic?id=29472"
     ],
     "backfill": [
       "backfill:geeknews:2026년 1월 1주차 (2025-12-29 ~ 2026-01-04):attention:25462",
