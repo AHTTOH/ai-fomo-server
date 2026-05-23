@@ -595,6 +595,9 @@ function sleep(ms) {
   });
 }
 
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+
 async function fetchText(url, timeoutMs = 20000) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const controller = new AbortController();
@@ -603,8 +606,12 @@ async function fetchText(url, timeoutMs = 20000) {
     try {
       const response = await fetch(url, {
         signal: controller.signal,
+        redirect: 'follow',
         headers: {
-          'user-agent': 'ai-fomo-server/1.0',
+          'user-agent': BROWSER_USER_AGENT,
+          accept:
+            'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1',
+          'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         },
       });
 
@@ -612,7 +619,8 @@ async function fetchText(url, timeoutMs = 20000) {
         return await response.text();
       }
 
-      if (response.status === 429 && attempt < 3) {
+      const isRetriable = response.status === 429 || response.status === 403 || response.status >= 500;
+      if (isRetriable && attempt < 3) {
         const retryAfterHeader = response.headers.get('retry-after');
         const retryAfterSeconds = Number.parseInt(retryAfterHeader || '0', 10);
         const waitMs = retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : (attempt + 1) * 2500;
@@ -1230,12 +1238,22 @@ async function collectDailyGeekNews() {
 }
 
 async function collectDailyWikiDocs() {
-  const feeds = await Promise.all(
+  const settled = await Promise.allSettled(
     WIKIDOCS_BOOKS.map(async (book) => {
       const feed = await parseRss(`https://wikidocs.net/book/${book.id}/rss/`);
       return { book, feed };
     }),
   );
+
+  const feeds = settled
+    .filter((result) => {
+      if (result.status === 'fulfilled') {
+        return true;
+      }
+      console.warn(`[wikidocs] skipped book: ${result.reason?.message || result.reason}`);
+      return false;
+    })
+    .map((result) => result.value);
 
   return feeds
     .flatMap(({ book, feed }) => {
@@ -1441,9 +1459,36 @@ async function collectBackfillEntries(range) {
 async function runDaily(channel, state) {
   console.log(`Daily sources: ${DAILY_SOURCES.join(', ')}`);
 
-  const batches = await Promise.all(
-    DAILY_SOURCES.map(async (source) => DAILY_SOURCE_COLLECTORS[source]()),
+  const settled = await Promise.allSettled(
+    DAILY_SOURCES.map(async (source) => {
+      const entries = await DAILY_SOURCE_COLLECTORS[source]();
+      return { source, entries };
+    }),
   );
+
+  const batches = [];
+  const failedSources = [];
+  for (let index = 0; index < settled.length; index += 1) {
+    const result = settled[index];
+    const source = DAILY_SOURCES[index];
+    if (result.status === 'fulfilled') {
+      batches.push(result.value.entries);
+      console.log(`[source:${source}] collected ${result.value.entries.length} entries`);
+    } else {
+      failedSources.push(source);
+      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      console.warn(`[source:${source}] failed: ${message}`);
+    }
+  }
+
+  if (failedSources.length === DAILY_SOURCES.length) {
+    throw new Error(`All daily sources failed: ${failedSources.join(', ')}`);
+  }
+
+  if (failedSources.length > 0) {
+    console.warn(`[runDaily] continuing with ${batches.length}/${DAILY_SOURCES.length} sources. failed: ${failedSources.join(', ')}`);
+  }
+
   const orderedEntries = dedupeDailyEntries(batches.flat());
 
   const posted = [];
